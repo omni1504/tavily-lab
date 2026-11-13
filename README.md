@@ -54,12 +54,32 @@ uv run evals/run_evals.py score evals/results/<run> --skip-judge   # determinist
   - per company: `*.scores.json`, `*.record.json` and `*.console.log`.
 - The golden set's `reference_facts` are prefilled; verify them before relying on check Q1.
 
+## Use from Claude / Quick Desktop (MCP)
+
+`mcp_server/server.py` is a local MCP server with one tool: `get_brief(company, include_sources=True)`. It returns the account brief as Markdown, plus the sources appendix.
+- **Cost and time:** a call takes 1–3 minutes and uses 4–10 Tavily searches.
+- **Transport:** stdio only, so no network port is opened.
+- **Tracing:** on, so calls appear in LangSmith.
+
+Register it in your client:
+
+```bash
+claude mcp add tavily-brief -- uv run --script <repo>/mcp_server/server.py   # Claude Code
+```
+
+```json
+{"mcpServers": {"tavily-brief": {"command": "<output of `which uv`>",
+  "args": ["run", "--script", "<repo>/mcp_server/server.py"]}}}
+```
+
+The JSON form is for Claude Desktop and Quick Desktop. Use absolute paths, because desktop apps don't inherit your shell `PATH`.
+
 ## Checks
 
 ```bash
 uvx ruff format --check .
 uvx ruff check .
-uv run --with pytest --with-requirements starter_agent.py pytest -q
+uv run --with pytest --with-requirements starter_agent.py --with-requirements mcp_server/server.py pytest -q
 ```
 
-Tests import `starter_agent.py`, so they run with the script's inline dependencies.
+Tests import the scripts, so they run with the scripts' inline dependencies.

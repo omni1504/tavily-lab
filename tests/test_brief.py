@@ -1,6 +1,7 @@
 """--brief mode: account-research prompt, capped Tavily searches, unchanged default mode."""
 
 import json
+import os
 from collections.abc import Iterator
 from datetime import date
 from types import SimpleNamespace
@@ -357,3 +358,69 @@ def test_appendix_verifies_urls_with_parentheses() -> None:
     )
     assert f"- [Amazon]({url})" in appendix.split("Additional research")[0]
     assert appendix.rstrip().endswith("- None")
+
+
+def finished_run_messages() -> list[Any]:
+    payload = tavily_payload("https://a.com/1", "https://b.com/2")
+    return [
+        AIMessage(
+            content="Searching now.",
+            tool_calls=[
+                {"id": "c1", "name": "tavily_search", "args": {"query": "Acme"}}
+            ],
+        ),
+        ToolMessage(
+            content=json.dumps(payload), tool_call_id="c1", name="tavily_search"
+        ),
+        AIMessage(content="## Overview\n- Fact [A](https://a.com/1)\n"),
+    ]
+
+
+def test_brief_result_collects_answer_sources_and_searches() -> None:
+    result = starter_agent.brief_result(finished_run_messages())
+    assert result.answer == "## Overview\n- Fact [A](https://a.com/1)\n"
+    assert result.sources == {"https://a.com/1": "T 1", "https://b.com/2": "T 2"}
+    assert result.searches[0]["args"] == {"query": "Acme"}
+    assert [r["url"] for r in result.searches[0]["results"]] == [
+        "https://a.com/1",
+        "https://b.com/2",
+    ]
+    assert "- [T 1](https://a.com/1)" in result.appendix.split("Additional research")[0]
+    assert result.markdown().startswith(result.answer)
+    assert result.markdown().endswith(result.appendix)
+    assert result.markdown(include_sources=False) == result.answer
+
+
+class InvokingAgent:
+    def __init__(self) -> None:
+        self.payload: dict[str, Any] | None = None
+
+    def invoke(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self.payload = payload
+        return {"messages": finished_run_messages()}
+
+
+def test_generate_brief_runs_brief_agent_without_printing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    agent = InvokingAgent()
+    built: list[bool] = []
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test")
+    monkeypatch.setattr(
+        starter_agent, "build_agent", lambda brief: built.append(brief) or agent
+    )
+
+    result = starter_agent.generate_brief("Acme", tracing=False)
+
+    assert built == [True]
+    assert agent.payload == {"messages": [{"role": "user", "content": "Account: Acme"}]}
+    assert os.environ["LANGSMITH_TRACING"] == "false"
+    assert result.answer.startswith("## Overview")
+    assert capsys.readouterr().out == ""
+
+
+def test_generate_brief_requires_tavily_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="TAVILY_API_KEY"):
+        starter_agent.generate_brief("Acme")
