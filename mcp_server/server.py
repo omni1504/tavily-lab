@@ -55,7 +55,7 @@ async def run_with_heartbeat(
     work: Callable[[], T], ctx: Context, interval: float = HEARTBEAT_S
 ) -> T:
     """Run blocking work in a thread; progress notifications keep clients from timing out
-    a call that takes about a minute.
+    a call that takes 1-3 minutes.
 
     A plain task (not a task group) so the work's own exception reaches the client unwrapped
     instead of as an ExceptionGroup.
@@ -81,7 +81,7 @@ async def get_brief(company: str, ctx: Context, include_sources: bool = True) ->
     """Research a company with Tavily web search and return a cited account brief (Markdown)
     for a Sales Representative and a Technical Presales engineer: Overview, Recent news
     (last 90 days), Strategic priorities, Main personas and Suggested talking points, plus a
-    sources appendix built from the actual search results. Takes about one minute and uses
+    sources appendix built from the actual search results. Takes 1-3 minutes and uses
     4-10 Tavily searches per call.
 
     Args:
