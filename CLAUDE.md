@@ -10,11 +10,12 @@ Tavily + LangChain research-agent CLI running on Amazon Bedrock. Features are ad
   - `starter_agent.py`: the app, as a single file;
   - `tests/`: app tests;
   - `evals/`: the eval framework and its tests (criteria in `evals/SCORING.md`);
-  - `parser/`: the session log prettifier.
+  - `parser/`: the session log prettifier;
+  - `mcp_server/`: a stdio MCP server exposing `get_brief`. It calls `starter_agent.generate_brief()`, never prints to stdout, and pins `mcp<2`, because the code uses the v1 `FastMCP` API.
 
 ## Commands
 - Run: `uv run starter_agent.py "<question>"`. Brief: `--brief "<account>"`. Options: `--no-tracing`, `--record out.json`.
-- Format: `uvx ruff format .` · Lint: `uvx ruff check .` · Tests (app and evals): `uv run --with pytest --with-requirements starter_agent.py pytest -q`
+- Format: `uvx ruff format .` · Lint: `uvx ruff check .` · Tests (app, evals, MCP): `uv run --with pytest --with-requirements starter_agent.py --with-requirements mcp_server/server.py pytest -q`
 - Evals:
   - `uv run evals/run_evals.py collect --companies <name>` (spends Tavily credits; needs an explicit selection);
   - `uv run evals/run_evals.py score <results-dir>` (judge only).
