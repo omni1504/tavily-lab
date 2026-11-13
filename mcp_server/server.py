@@ -4,7 +4,7 @@
 #   "langchain>=1.0.0",
 #   "langchain-aws>=1.7.6",
 #   "langchain-tavily>=0.2.0",
-#   "mcp>=1.13",
+#   "mcp>=1.13,<2",  # code uses the v1 FastMCP API (renamed MCPServer in v2)
 #   "python-dotenv>=1.0.0",
 #   "rich>=13.0.0",
 #   "typer>=0.12.0",

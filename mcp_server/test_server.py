@@ -93,3 +93,11 @@ async def test_heartbeat_stops_after_work_finishes() -> None:
     count = len(ctx.progress)
     await anyio.sleep(0.15)
     assert len(ctx.progress) == count
+
+
+def test_script_pins_mcp_v1_api() -> None:
+    """Regression: an unpinned `mcp` resolved to 2.x, where FastMCP no longer exists."""
+    header = (
+        (server.REPO_ROOT / "mcp_server" / "server.py").read_text().split("# ///")[1]
+    )
+    assert '"mcp>=1.13,<2"' in header
