@@ -1,4 +1,4 @@
-"""LangSmith tracing is driven by .env: on when LANGSMITH_API_KEY is set, off otherwise."""
+"""LangSmith tracing is switched by --tracing/--no-tracing (default on); .env only holds the key."""
 
 import logging
 import os
@@ -24,8 +24,8 @@ def run_cli(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
     monkeypatch.setenv("LANGSMITH_PROJECT", "tavily-research-agent")
     monkeypatch.delenv("LANGSMITH_TRACING", raising=False)
 
-    def invoke() -> None:
-        result = CliRunner().invoke(starter_agent.app, ["hello"])
+    def invoke(*flags: str) -> None:
+        result = CliRunner().invoke(starter_agent.app, [*flags, "hello"])
         assert result.exit_code == 0, result.output
 
     yield invoke
@@ -41,23 +41,34 @@ def test_tracing_enabled_by_default_when_api_key_set(
     assert "LangSmith tracing enabled (project: tavily-research-agent)" in caplog.text
 
 
+def test_no_tracing_flag_disables_tracing(
+    run_cli: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test")
+    with caplog.at_level(logging.INFO):
+        run_cli("--no-tracing")
+    assert os.environ["LANGSMITH_TRACING"] == "false"
+    assert "LangSmith tracing disabled (--no-tracing)" in caplog.text
+
+
 def test_tracing_disabled_without_api_key(
     run_cli: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
-    monkeypatch.setenv("LANGSMITH_TRACING", "true")
     with caplog.at_level(logging.INFO):
-        run_cli()
+        run_cli("--tracing")
     assert os.environ["LANGSMITH_TRACING"] == "false"
-    assert "LangSmith tracing disabled" in caplog.text
+    assert "set LANGSMITH_API_KEY in .env to enable" in caplog.text
 
 
-def test_explicit_tracing_false_in_env_is_respected(
-    run_cli: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+@pytest.mark.parametrize("env_value", ["true", "false"])
+def test_langsmith_tracing_env_value_is_ignored(
+    run_cli: Any, monkeypatch: pytest.MonkeyPatch, env_value: str
 ) -> None:
+    """The CLI flag is the switch now; a LANGSMITH_TRACING value from .env no longer decides."""
     monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test")
-    monkeypatch.setenv("LANGSMITH_TRACING", "false")
-    with caplog.at_level(logging.INFO):
-        run_cli()
+    monkeypatch.setenv("LANGSMITH_TRACING", env_value)
+    run_cli()
+    assert os.environ["LANGSMITH_TRACING"] == "true"
+    run_cli("--no-tracing")
     assert os.environ["LANGSMITH_TRACING"] == "false"
-    assert "LangSmith tracing disabled" in caplog.text

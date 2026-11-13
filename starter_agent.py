@@ -269,6 +269,13 @@ def main(
             "--brief", help="Research the account and print a sales/presales brief."
         ),
     ] = False,
+    tracing: Annotated[
+        bool,
+        typer.Option(
+            "--tracing/--no-tracing",
+            help="LangSmith tracing (needs LANGSMITH_API_KEY).",
+        ),
+    ] = True,
 ) -> None:
     """Ask a question and stream a small LangChain agent that searches with Tavily."""
 
@@ -276,20 +283,20 @@ def main(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
 
-    # LangChain traces automatically from LANGSMITH_* env vars; default tracing on when a key exists.
-    if os.getenv("LANGSMITH_API_KEY"):
-        os.environ.setdefault("LANGSMITH_TRACING", "true")
-    else:
-        os.environ["LANGSMITH_TRACING"] = "false"
-    if os.environ["LANGSMITH_TRACING"].lower() == "true":
+    # LangChain reads LANGSMITH_TRACING from the environment; the CLI flag decides its value.
+    tracing_enabled = tracing and bool(os.getenv("LANGSMITH_API_KEY"))
+    os.environ["LANGSMITH_TRACING"] = "true" if tracing_enabled else "false"
+    if tracing_enabled:
         logger.info(
             "LangSmith tracing enabled (project: %s)",
             os.getenv("LANGSMITH_PROJECT", "default"),
         )
-    else:
+    elif tracing:
         logger.info(
             "LangSmith tracing disabled (set LANGSMITH_API_KEY in .env to enable)"
         )
+    else:
+        logger.info("LangSmith tracing disabled (--no-tracing)")
 
     require_env(
         "TAVILY_API_KEY",
