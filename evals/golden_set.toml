@@ -1,0 +1,52 @@
+# Golden set for `--brief` evals. Edit freely: add/remove [[company]] blocks.
+#
+# ticker          - omit for private companies (check D5 expects no ticker in news queries then)
+# primary_domains - the company's own sites; sec.gov is added automatically for public companies (D6)
+# reference_facts - ground truth for judge check Q1.
+#                   PREFILLED FROM MODEL KNOWLEDGE - verify each fact before relying on scores.
+
+[settings]
+news_window_days = 90 # must match BRIEF_NEWS_WINDOW_DAYS in starter_agent.py
+
+[[company]]
+name = "Nebius"
+ticker = "NBIS"
+primary_domains = ["nebius.com"]
+reference_facts = [
+  "CEO: Arkady Volozh",                    # verify
+  "Headquarters: Amsterdam, Netherlands",  # verify
+]
+
+[[company]]
+name = "Amazon"
+ticker = "AMZN"
+primary_domains = ["amazon.com", "aboutamazon.com"]
+reference_facts = [
+  "CEO: Andy Jassy",                       # verify
+  "Headquarters: Seattle, Washington",     # verify
+]
+
+[[company]]
+name = "Snowflake"
+ticker = "SNOW"
+primary_domains = ["snowflake.com"]
+reference_facts = [
+  "CEO: Sridhar Ramaswamy",                # verify
+]
+
+[[company]]
+name = "Cisco"
+ticker = "CSCO"
+primary_domains = ["cisco.com"]
+reference_facts = [
+  "CEO: Chuck Robbins",                    # verify
+  "Headquarters: San Jose, California",    # verify
+]
+
+[[company]]
+name = "Databricks"
+primary_domains = ["databricks.com"]
+reference_facts = [
+  "CEO: Ali Ghodsi",                       # verify
+  "Headquarters: San Francisco, California",  # verify
+]

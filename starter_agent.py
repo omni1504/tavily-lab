@@ -32,7 +32,9 @@ import json
 import logging
 import os
 import re
+import time
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Annotated, Any
 
 import typer
@@ -59,7 +61,9 @@ Answer the user's question directly and include source URLs when available.
 
 BRIEF_NEWS_WINDOW_DAYS = 90
 BRIEF_MAX_SEARCHES = 10
-URL_PATTERN = re.compile(r"https?://[^\s)\]>\"']+")
+# Balanced "(...)" groups are part of the URL (e.g. Wikipedia's Amazon_(company)); the ")" that
+# closes a Markdown link is not.
+URL_PATTERN = re.compile(r"https?://(?:[^\s()<>\[\]\"']|\([^\s()<>\"']*\))+")
 
 BRIEF_PROMPT = """You are an account research assistant for a Sales Representative and a
 Technical Presales engineer preparing for a meeting with the account named by the user.
@@ -106,6 +110,9 @@ Citation rules (mandatory):
 - Write every statement as a bullet (or, in Main personas, a table row) that ends with its
   source as a Markdown link: [title](URL).
 - Use only URLs returned by Tavily search. Never invent or guess URLs.
+- If a statement combines facts from several search results, cite every one of them:
+  [title 1](URL 1) [title 2](URL 2). Cite a source only for facts its text states.
+- If sources disagree on a figure, give each value with its own source.
 - If a statement is not backed by a search result (for example a suggested talking point
   or your own inference), end it with "(No citation)".
 - Do not add a sources list; one is generated automatically from the search results.
@@ -139,17 +146,28 @@ def brief_prompt(today: date) -> str:
     )
 
 
-def collect_sources(content: Any, sources: dict[str, str]) -> None:
-    """Record every URL Tavily actually returned; citations are verified against these."""
+def search_results(content: Any) -> list[dict[str, Any]]:
+    """Tavily results from a tool message; empty for non-search content such as the limit message."""
     try:
         payload = json.loads(content) if isinstance(content, str) else content
     except json.JSONDecodeError:
-        return  # e.g. the tool-call-limit message: not a search result, nothing to record
+        return []
     if not isinstance(payload, dict):
-        return
-    for result in payload.get("results", []):
-        if isinstance(result, dict) and result.get("url"):
+        return []
+    return [r for r in payload.get("results", []) if isinstance(r, dict)]
+
+
+def collect_sources(content: Any, sources: dict[str, str]) -> None:
+    """Record every URL Tavily actually returned; citations are verified against these."""
+    for result in search_results(content):
+        if result.get("url"):
             sources.setdefault(result["url"], result.get("title") or "Untitled")
+
+
+def write_record(path: Path, record: dict[str, Any]) -> None:
+    """Persist a run for offline evaluation, so scoring never needs to re-run the agent."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def normalize_url(url: str) -> str:
@@ -269,6 +287,19 @@ def main(
             "--brief", help="Research the account and print a sales/presales brief."
         ),
     ] = False,
+    tracing: Annotated[
+        bool,
+        typer.Option(
+            "--tracing/--no-tracing",
+            help="LangSmith tracing (needs LANGSMITH_API_KEY).",
+        ),
+    ] = True,
+    record: Annotated[
+        Path | None,
+        typer.Option(
+            "--record", help="Write the answer, searches and sources to this JSON file."
+        ),
+    ] = None,
 ) -> None:
     """Ask a question and stream a small LangChain agent that searches with Tavily."""
 
@@ -276,20 +307,20 @@ def main(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
 
-    # LangChain traces automatically from LANGSMITH_* env vars; default tracing on when a key exists.
-    if os.getenv("LANGSMITH_API_KEY"):
-        os.environ.setdefault("LANGSMITH_TRACING", "true")
-    else:
-        os.environ["LANGSMITH_TRACING"] = "false"
-    if os.environ["LANGSMITH_TRACING"].lower() == "true":
+    # LangChain reads LANGSMITH_TRACING from the environment; the CLI flag decides its value.
+    tracing_enabled = tracing and bool(os.getenv("LANGSMITH_API_KEY"))
+    os.environ["LANGSMITH_TRACING"] = "true" if tracing_enabled else "false"
+    if tracing_enabled:
         logger.info(
             "LangSmith tracing enabled (project: %s)",
             os.getenv("LANGSMITH_PROJECT", "default"),
         )
-    else:
+    elif tracing:
         logger.info(
             "LangSmith tracing disabled (set LANGSMITH_API_KEY in .env to enable)"
         )
+    else:
+        logger.info("LangSmith tracing disabled (--no-tracing)")
 
     require_env(
         "TAVILY_API_KEY",
@@ -328,6 +359,8 @@ def main(
     last_event_was_text = False
     sources: dict[str, str] = {}
     answer_parts: list[str] = []
+    searches: dict[str, dict[str, Any]] = {}
+    started = time.monotonic()
 
     try:
         stream = agent.stream(
@@ -391,6 +424,10 @@ def main(
                     for message in node_update.get("messages", []):
                         if getattr(message, "type", None) == "ai":
                             for tool_call in getattr(message, "tool_calls", []) or []:
+                                searches.setdefault(
+                                    str(tool_call.get("id")),
+                                    {"args": tool_call.get("args", {}), "results": []},
+                                )
                                 key = str(
                                     tool_call.get("id")
                                     or tool_call.get("name")
@@ -408,7 +445,12 @@ def main(
                                 console.print()
                                 last_event_was_text = False
                             print_tool_result(message)
-                            collect_sources(getattr(message, "content", ""), sources)
+                            content = getattr(message, "content", "")
+                            collect_sources(content, sources)
+                            searches.setdefault(
+                                str(getattr(message, "tool_call_id", "")),
+                                {"args": {}, "results": []},
+                            )["results"] = search_results(content)
 
         if last_event_was_text:
             console.print()
@@ -420,6 +462,20 @@ def main(
                 markup=False,
                 highlight=False,
                 soft_wrap=True,  # keep long URLs on one line so they stay copyable
+            )
+
+        if record:
+            write_record(
+                record,
+                {
+                    "input": question_text,
+                    "brief": brief,
+                    "date": date.today().isoformat(),
+                    "answer": "".join(answer_parts),
+                    "searches": list(searches.values()),
+                    "sources": sources,
+                    "duration_s": round(time.monotonic() - started, 1),
+                },
             )
 
     except KeyboardInterrupt:
