@@ -10,12 +10,12 @@ Tavily + LangChain research-agent CLI running on Amazon Bedrock. Features are ad
 
 ## Commands
 - Run: `uv run starter_agent.py "<question>"`
-- Format: `uvx ruff format .` · Lint: `uvx ruff check .` · Tests: `uvx pytest -q`
+- Format: `uvx ruff format .` · Lint: `uvx ruff check .` · Tests: `uv run --with pytest --with-requirements starter_agent.py pytest -q`
 
 ## Configuration
 - Secrets/API keys (Tavily, LangSmith, ...) live in `.env`, loaded with `python-dotenv`. Never hardcode, log, or commit them.
 - AWS: Bedrock via named profile `amirasf+genai`, region `us-west-2`, model `us.anthropic.claude-sonnet-4-6`, as set in `starter_agent.py`. Keep these unless explicitly asked.
-- LangSmith tracing is enabled through `LANGSMITH_*` env vars in `.env`.
+- LangSmith tracing is on whenever `LANGSMITH_API_KEY` is set in `.env`; `LANGSMITH_TRACING=false` turns it off. Project comes from `LANGSMITH_PROJECT` (`tavily-research-agent`). Startup logs the tracing status.
 
 ## Workflow
 - Always follow the `feature-workflow` skill: plan → user approval → branch per feature → small steps with tests → PR via `gh`.
