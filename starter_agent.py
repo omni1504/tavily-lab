@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from datetime import date, timedelta
 from typing import Annotated, Any
 
@@ -58,6 +59,7 @@ Answer the user's question directly and include source URLs when available.
 
 BRIEF_NEWS_WINDOW_DAYS = 90
 BRIEF_MAX_SEARCHES = 10
+URL_PATTERN = re.compile(r"https?://[^\s)\]>\"']+")
 
 BRIEF_PROMPT = """You are an account research assistant for a Sales Representative and a
 Technical Presales engineer preparing for a meeting with the account named by the user.
@@ -129,6 +131,52 @@ def brief_prompt(today: date) -> str:
         since=since.isoformat(),
         max_searches=BRIEF_MAX_SEARCHES,
     )
+
+
+def collect_sources(content: Any, sources: dict[str, str]) -> None:
+    """Record every URL Tavily actually returned; citations are verified against these."""
+    try:
+        payload = json.loads(content) if isinstance(content, str) else content
+    except json.JSONDecodeError:
+        return  # e.g. the tool-call-limit message: not a search result, nothing to record
+    if not isinstance(payload, dict):
+        return
+    for result in payload.get("results", []):
+        if isinstance(result, dict) and result.get("url"):
+            sources.setdefault(result["url"], result.get("title") or "Untitled")
+
+
+def normalize_url(url: str) -> str:
+    return url.rstrip(".,;:").rstrip("/")
+
+
+def build_source_appendix(answer: str, sources: dict[str, str]) -> str:
+    """Split URLs into cited-and-verified, retrieved-but-uncited, and cited-but-never-retrieved."""
+    known = {normalize_url(url): (url, title) for url, title in sources.items()}
+    cited = list(
+        dict.fromkeys(normalize_url(url) for url in URL_PATTERN.findall(answer))
+    )
+    verified = [known[url] for url in cited if url in known]
+    unverified = [url for url in cited if url not in known]
+    additional = [entry for key, entry in known.items() if key not in cited]
+
+    def section(title: str, items: list[str]) -> list[str]:
+        return [f"## {title}", *(items or ["- None"]), ""]
+
+    return "\n".join(
+        section(
+            "Sources (cited, returned by Tavily)",
+            [f"- [{t}]({u})" for u, t in verified],
+        )
+        + section(
+            "Additional research (returned by Tavily, not cited)",
+            [f"- [{t}]({u})" for u, t in additional],
+        )
+        + section(
+            "Unverified citations (not returned by Tavily)",
+            [f"- {u}" for u in unverified],
+        )
+    ).strip()
 
 
 def message_text(message: Any) -> str:
@@ -272,6 +320,8 @@ def main(
     printed_tool_calls: set[str] = set()
     assistant_started = False
     last_event_was_text = False
+    sources: dict[str, str] = {}
+    answer_parts: list[str] = []
 
     try:
         stream = agent.stream(
@@ -318,6 +368,7 @@ def main(
 
                 text = message_text(message)
                 if text:
+                    answer_parts.append(text)
                     if not assistant_started:
                         if printed_tool_calls:
                             console.print()
@@ -349,9 +400,19 @@ def main(
                                 console.print()
                                 last_event_was_text = False
                             print_tool_result(message)
+                            collect_sources(getattr(message, "content", ""), sources)
 
         if last_event_was_text:
             console.print()
+
+        if brief:
+            console.rule("[bold magenta]Sources (from Tavily tool output)")
+            console.print(
+                build_source_appendix("".join(answer_parts), sources),
+                markup=False,
+                highlight=False,
+                soft_wrap=True,  # keep long URLs on one line so they stay copyable
+            )
 
     except KeyboardInterrupt:
         console.print("\n[red]Interrupted.[/red]")

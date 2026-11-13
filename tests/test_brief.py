@@ -1,5 +1,6 @@
 """--brief mode: account-research prompt, capped Tavily searches, unchanged default mode."""
 
+import json
 from collections.abc import Iterator
 from datetime import date
 from types import SimpleNamespace
@@ -7,6 +8,7 @@ from typing import Any
 
 import pytest
 from langchain.agents.middleware import ToolCallLimitMiddleware
+from langchain_core.messages import AIMessageChunk, ToolMessage
 from typer.testing import CliRunner
 
 import starter_agent
@@ -94,3 +96,114 @@ def test_default_mode_is_unchanged(cli: Any) -> None:
     }
     assert "Question" in output
     assert "Account brief" not in output
+
+
+def tavily_payload(*urls: str) -> dict[str, Any]:
+    return {
+        "query": "q",
+        "results": [{"url": url, "title": f"T {url[-1]}"} for url in urls],
+    }
+
+
+def test_collect_sources_parses_json_string_and_dict_without_duplicates() -> None:
+    sources: dict[str, str] = {}
+    starter_agent.collect_sources(json.dumps(tavily_payload("https://a.com")), sources)
+    starter_agent.collect_sources(
+        tavily_payload("https://a.com", "https://b.com"), sources
+    )
+    assert sources == {"https://a.com": "T m", "https://b.com": "T m"}
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "Tool call limit exceeded. Do not call 'tavily_search' again.",
+        ["not", "a", "dict"],
+        {"results": [{"title": "no url"}, "not a dict"]},
+        {"no_results_key": True},
+    ],
+)
+def test_collect_sources_ignores_non_search_content(content: Any) -> None:
+    sources: dict[str, str] = {}
+    starter_agent.collect_sources(content, sources)
+    assert sources == {}
+
+
+def test_collect_sources_defaults_missing_title() -> None:
+    sources: dict[str, str] = {}
+    starter_agent.collect_sources({"results": [{"url": "https://x.io"}]}, sources)
+    assert sources == {"https://x.io": "Untitled"}
+
+
+def test_appendix_splits_verified_additional_and_unverified() -> None:
+    sources = {
+        "https://a.com/news/": "A news",
+        "https://b.com/page": "B page",
+    }
+    answer = (
+        "- Fact one [A](https://a.com/news).\n"
+        "- Fact two https://a.com/news/.\n"
+        "- Made up [X](https://invented.example/x)\n"
+        "- Talking point (No citation)\n"
+    )
+    appendix = starter_agent.build_source_appendix(answer, sources)
+    verified, additional, unverified = appendix.split("\n\n")
+
+    assert verified.splitlines() == [
+        "## Sources (cited, returned by Tavily)",
+        "- [A news](https://a.com/news/)",
+    ]
+    assert additional.splitlines() == [
+        "## Additional research (returned by Tavily, not cited)",
+        "- [B page](https://b.com/page)",
+    ]
+    assert unverified.splitlines() == [
+        "## Unverified citations (not returned by Tavily)",
+        "- https://invented.example/x",
+    ]
+
+
+def test_appendix_shows_none_for_empty_groups() -> None:
+    appendix = starter_agent.build_source_appendix("No links here.", {})
+    assert appendix.count("- None") == 3
+
+
+def test_brief_mode_prints_appendix_from_tool_output(cli: Any) -> None:
+    events: list[tuple[str, Any]] = [
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        ToolMessage(
+                            content=json.dumps(
+                                tavily_payload("https://a.com/1", "https://b.com/2")
+                            ),
+                            tool_call_id="call-1",
+                            name="tavily_search",
+                        )
+                    ]
+                }
+            },
+        ),
+        (
+            "messages",
+            (AIMessageChunk(content="## Overview\n- Fact [A](https://a.com/1)\n"), {}),
+        ),
+        ("messages", (AIMessageChunk(content="- Guess [Z](https://z.org/9)\n"), {})),
+    ]
+    _kwargs, _agent, output = cli(["--brief", "Snowflake"], events)
+
+    sources_part = output.split("Sources (from Tavily tool output)")[1]
+    assert "- [T 1](https://a.com/1)" in sources_part
+    assert "- [T 2](https://b.com/2)" in sources_part
+    assert "- https://z.org/9" in sources_part
+    assert sources_part.index("https://a.com/1") < sources_part.index(
+        "Additional research"
+    )
+    assert sources_part.index("https://b.com/2") > sources_part.index(
+        "Additional research"
+    )
+    assert sources_part.index("https://z.org/9") > sources_part.index(
+        "Unverified citations"
+    )
