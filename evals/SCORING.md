@@ -17,7 +17,7 @@ The JSON record contains:
 
 Scoring works only from this record, so a brief can be re-scored without running the agent or spending Tavily credits.
 
-**Claims** are the bullet lines (`- …`) and table body rows (the persona table) under each `##` section heading. Header text and table header rows are not claims.
+**Claims** are the bullet lines (`- …`) and table body rows (the persona table) under each `##` section heading. Indented sub-bullets are folded into their parent bullet. Header text and table header rows are not claims.
 
 ## A. Deterministic checks (code, no LLM)
 
@@ -36,6 +36,10 @@ Scoring works only from this record, so a brief can be re-scored without running
 ## B. LLM judge: source correctness (per claim)
 
 For each cited claim, the judge gets the claim text plus the Tavily title, content and publication date of each URL the claim cites. It judges only from that text; it doesn't open the page. Related issues: #4 and #5.
+
+- **Merged snippets:** Tavily returns a snippet chosen for each query, so the same URL can come back from several searches with different text. The judge gets **all** snippets for that URL, merged, which is exactly what the agent saw.
+- **Persona rows:** these are judged for support only on the person's name and title. The Relevance column is the writer's own analysis.
+- **Partial and unsupported claims** most often mean the agent combined facts from several results but cited only one. The brief prompt now requires citing every source a statement draws on. A separate issue tracks flagging claims whose facts appear only in uncited results.
 
 | ID | Question | Labels | Metric |
 |---|---|---|---|

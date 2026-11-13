@@ -6,7 +6,7 @@ A small research agent CLI built with LangChain and the Tavily search tool, runn
 
 1. Install [uv](https://docs.astral.sh/uv/). Dependencies are declared inline in `starter_agent.py` (PEP 723), so `uv run` installs them.
 2. Create a `.env` file with `TAVILY_API_KEY`. For LangSmith tracing, also add `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT` and `LANGSMITH_PROJECT` (this repo uses `tavily-research-agent`).
-   - Tracing is on whenever `LANGSMITH_API_KEY` is set. Set `LANGSMITH_TRACING=false` to turn it off.
+   - Tracing is controlled by the CLI: it's on by default (`--tracing`) and needs `LANGSMITH_API_KEY`. Pass `--no-tracing` to turn it off. `LANGSMITH_TRACING` in `.env` no longer has any effect.
    - The script logs at startup whether tracing is enabled and which project it uses.
 3. Make sure the AWS named profile configured in `starter_agent.py` has Bedrock access in the configured region.
 
@@ -32,7 +32,27 @@ The brief has these sections: **Overview**, **Recent news** (last 90 days), **St
   - **Sources:** cited URLs that Tavily returned.
   - **Additional research:** URLs Tavily returned that the brief doesn't cite.
   - **Unverified citations:** URLs in the brief that Tavily never returned.
-- **Limits:** the appendix shows whether a URL came from search, not whether it supports the statement it's attached to. A typical brief uses 4–7 Tavily credits.
+- **Limits:** the appendix shows whether a URL came from search, not whether it supports the statement it's attached to. A typical brief uses 4–8 Tavily credits.
+- **Record:** `--record run.json` saves the brief, every Tavily call with its results, and the source URLs to a JSON file. The evals use this.
+
+## Evals (`evals/`)
+
+A separate program scores `--brief` output against a configurable golden set (`evals/golden_set.toml`: Nebius, Amazon, Snowflake, Cisco, Databricks). It uses deterministic checks plus an LLM judge on the same Bedrock model. Everything stays local, with no LangSmith tracing. **The scoring criteria are documented in [evals/SCORING.md](evals/SCORING.md).**
+
+```bash
+uv run evals/run_evals.py collect --companies Databricks   # runs the agent: spends Tavily credits
+uv run evals/run_evals.py collect --all                     # whole golden set (~20–40 credits)
+uv run evals/run_evals.py score evals/results/<run>         # judge only: no agent or Tavily calls
+uv run evals/run_evals.py score evals/results/<run> --skip-judge   # deterministic checks only
+```
+
+- `collect` refuses to run without `--companies` or `--all`, so credits are never spent by accident. Companies run one at a time.
+- `score` re-scores saved records, so you can change the criteria without re-running the agent.
+- Results go to `evals/results/<timestamp>/` (git-ignored):
+  - `report.md`: the scorecard, plus what failed and why;
+  - `scores.csv`;
+  - per company: `*.scores.json`, `*.record.json` and `*.console.log`.
+- The golden set's `reference_facts` are prefilled; verify them before relying on check Q1.
 
 ## Checks
 
