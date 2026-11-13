@@ -74,6 +74,10 @@ claude mcp add tavily-brief -- uv run --script <repo>/mcp_server/server.py   # C
 
 The JSON form is for Claude Desktop and Quick Desktop. Use absolute paths, because desktop apps don't inherit your shell `PATH`.
 
+Example: Quick Desktop calls `get_brief` and renders the cited brief.
+
+<img src="docs/images/mcp-quick-desktop-brief.png" alt="Quick Desktop calling the tavily-brief get_brief tool and showing a cited account brief for Tavily" width="700">
+
 ## Roadmap
 
 - **Evals in LangSmith** (#8): linked traces for eval runs, scores posted as trace feedback, then a golden-set dataset with experiments.
