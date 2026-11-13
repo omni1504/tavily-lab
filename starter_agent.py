@@ -59,6 +59,7 @@ Use Tavily search when you need current or factual web information.
 Answer the user's question directly and include source URLs when available.
 """
 
+BRIEF_USER_MESSAGE = "Account: {account}"
 BRIEF_NEWS_WINDOW_DAYS = 90
 BRIEF_MAX_SEARCHES = 10
 # Balanced "(...)" groups are part of the URL (e.g. Wikipedia's Amazon_(company)); the ")" that
@@ -276,6 +277,44 @@ def print_tool_result(message: Any) -> None:
     )
 
 
+def configure_tracing(tracing: bool) -> bool:
+    """LangChain reads LANGSMITH_TRACING from the environment; the caller's flag decides it."""
+    tracing_enabled = tracing and bool(os.getenv("LANGSMITH_API_KEY"))
+    os.environ["LANGSMITH_TRACING"] = "true" if tracing_enabled else "false"
+    if tracing_enabled:
+        logger.info(
+            "LangSmith tracing enabled (project: %s)",
+            os.getenv("LANGSMITH_PROJECT", "default"),
+        )
+    elif tracing:
+        logger.info(
+            "LangSmith tracing disabled (set LANGSMITH_API_KEY in .env to enable)"
+        )
+    else:
+        logger.info("LangSmith tracing disabled (--no-tracing)")
+    return tracing_enabled
+
+
+def build_agent(brief: bool) -> Any:
+    """One place to build the agent, so the CLI and programmatic callers behave the same."""
+    search_tool = TavilySearch()
+    middleware = (
+        [
+            ToolCallLimitMiddleware(
+                tool_name=search_tool.name, run_limit=BRIEF_MAX_SEARCHES
+            )
+        ]
+        if brief
+        else []
+    )
+    return create_agent(
+        model=llm,
+        tools=[search_tool],
+        system_prompt=brief_prompt(date.today()) if brief else SYSTEM_PROMPT,
+        middleware=middleware,
+    )
+
+
 @app.command()
 def main(
     question: Annotated[
@@ -306,21 +345,7 @@ def main(
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-
-    # LangChain reads LANGSMITH_TRACING from the environment; the CLI flag decides its value.
-    tracing_enabled = tracing and bool(os.getenv("LANGSMITH_API_KEY"))
-    os.environ["LANGSMITH_TRACING"] = "true" if tracing_enabled else "false"
-    if tracing_enabled:
-        logger.info(
-            "LangSmith tracing enabled (project: %s)",
-            os.getenv("LANGSMITH_PROJECT", "default"),
-        )
-    elif tracing:
-        logger.info(
-            "LangSmith tracing disabled (set LANGSMITH_API_KEY in .env to enable)"
-        )
-    else:
-        logger.info("LangSmith tracing disabled (--no-tracing)")
+    configure_tracing(tracing)
 
     require_env(
         "TAVILY_API_KEY",
@@ -328,26 +353,10 @@ def main(
     )
 
     question_text = " ".join(question)
-    system_prompt = brief_prompt(date.today()) if brief else SYSTEM_PROMPT
-    user_message = f"Account: {question_text}" if brief else question_text
-
-    search_tool = TavilySearch()
-    middleware = (
-        [
-            ToolCallLimitMiddleware(
-                tool_name=search_tool.name, run_limit=BRIEF_MAX_SEARCHES
-            )
-        ]
-        if brief
-        else []
+    user_message = (
+        BRIEF_USER_MESSAGE.format(account=question_text) if brief else question_text
     )
-
-    agent = create_agent(
-        model=llm,
-        tools=[search_tool],
-        system_prompt=system_prompt,
-        middleware=middleware,
-    )
+    agent = build_agent(brief)
 
     title = "Account brief" if brief else "Question"
     console.print(Panel.fit(question_text, title=title, border_style="cyan"))
