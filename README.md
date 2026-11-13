@@ -16,6 +16,24 @@ A small research agent CLI built with LangChain and the Tavily search tool, runn
 uv run starter_agent.py "What are the latest trends in agent evaluation?"
 ```
 
+### Account brief (`--brief`)
+
+Use this mode to prepare a Sales Representative or Technical Presales engineer for a meeting. Pass an account name instead of a question:
+
+```bash
+uv run starter_agent.py --brief "Acme Corp"
+```
+
+The brief has these sections: **Overview**, **Recent news** (last 90 days), **Strategic priorities**, **Main personas** (a table with a source for each row), and **Suggested talking points** (Sales and Technical).
+
+- **Searches:** the agent first runs four Tavily searches together: overview, news (filtered by start date, using the ticker for public companies), strategy and leadership. It runs a refined follow-up search only when a section has too few results. A hard limit of 10 Tavily calls per brief is enforced in code with LangChain's `ToolCallLimitMiddleware`.
+- **Citations:** every statement ends with a source link, or `(No citation)` when it is the model's own inference, such as most talking points.
+- **Sources appendix:** after the brief, the script prints three lists built from the actual Tavily tool output, not from the model:
+  - **Sources:** cited URLs that Tavily returned.
+  - **Additional research:** URLs Tavily returned that the brief doesn't cite.
+  - **Unverified citations:** URLs in the brief that Tavily never returned.
+- **Limits:** the appendix shows whether a URL came from search, not whether it supports the statement it's attached to. A typical brief uses 4–7 Tavily credits.
+
 ## Checks
 
 ```bash
