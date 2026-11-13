@@ -61,7 +61,9 @@ Answer the user's question directly and include source URLs when available.
 
 BRIEF_NEWS_WINDOW_DAYS = 90
 BRIEF_MAX_SEARCHES = 10
-URL_PATTERN = re.compile(r"https?://[^\s)\]>\"']+")
+# Balanced "(...)" groups are part of the URL (e.g. Wikipedia's Amazon_(company)); the ")" that
+# closes a Markdown link is not.
+URL_PATTERN = re.compile(r"https?://(?:[^\s()<>\[\]\"']|\([^\s()<>\"']*\))+")
 
 BRIEF_PROMPT = """You are an account research assistant for a Sales Representative and a
 Technical Presales engineer preparing for a meeting with the account named by the user.

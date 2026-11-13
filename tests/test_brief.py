@@ -329,3 +329,31 @@ def test_brief_prompt_requires_citing_every_source_a_statement_uses() -> None:
     assert (
         "If sources disagree on a figure, give each value with its own source" in prompt
     )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "[W](https://en.wikipedia.org/wiki/Amazon_(company))",
+            ["https://en.wikipedia.org/wiki/Amazon_(company)"],
+        ),
+        (
+            "[A](https://a.com/x) and https://b.com/y.",
+            ["https://a.com/x", "https://b.com/y."],
+        ),
+        ("<https://c.com/z>", ["https://c.com/z"]),
+    ],
+)
+def test_url_pattern_keeps_balanced_parentheses(text: str, expected: list[str]) -> None:
+    """Regression: Wikipedia URLs with "(...)" were cut and reported as unverified."""
+    assert starter_agent.URL_PATTERN.findall(text) == expected
+
+
+def test_appendix_verifies_urls_with_parentheses() -> None:
+    url = "https://en.wikipedia.org/wiki/Amazon_(company)"
+    appendix = starter_agent.build_source_appendix(
+        f"- Fact [W]({url})", {url: "Amazon"}
+    )
+    assert f"- [Amazon]({url})" in appendix.split("Additional research")[0]
+    assert appendix.rstrip().endswith("- None")
