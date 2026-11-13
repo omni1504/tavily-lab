@@ -207,3 +207,17 @@ def test_brief_mode_prints_appendix_from_tool_output(cli: Any) -> None:
     assert sources_part.index("https://z.org/9") > sources_part.index(
         "Unverified citations"
     )
+
+
+def test_stream_ignores_empty_middleware_updates(cli: Any) -> None:
+    """Regression: ToolCallLimitMiddleware emits a None update when it changes nothing."""
+    events: list[tuple[str, Any]] = [
+        (
+            "messages",
+            (AIMessageChunk(content="## Overview\n- Fact (No citation)\n"), {}),
+        ),
+        ("updates", {"ToolCallLimitMiddleware[tavily_search].after_model": None}),
+    ]
+    _kwargs, _agent, output = cli(["--brief", "Snowflake"], events)
+    assert "Agent run failed" not in output
+    assert "Sources (from Tavily tool output)" in output

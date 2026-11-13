@@ -380,6 +380,8 @@ def main(
 
             elif mode == "updates":
                 for node_update in data.values():
+                    if not isinstance(node_update, dict):
+                        continue  # middleware hooks report None when they change nothing
                     for message in node_update.get("messages", []):
                         if getattr(message, "type", None) == "ai":
                             for tool_call in getattr(message, "tool_calls", []) or []:
