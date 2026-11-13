@@ -108,6 +108,9 @@ Citation rules (mandatory):
 - Write every statement as a bullet (or, in Main personas, a table row) that ends with its
   source as a Markdown link: [title](URL).
 - Use only URLs returned by Tavily search. Never invent or guess URLs.
+- If a statement combines facts from several search results, cite every one of them:
+  [title 1](URL 1) [title 2](URL 2). Cite a source only for facts its text states.
+- If sources disagree on a figure, give each value with its own source.
 - If a statement is not backed by a search result (for example a suggested talking point
   or your own inference), end it with "(No citation)".
 - Do not add a sources list; one is generated automatically from the search results.

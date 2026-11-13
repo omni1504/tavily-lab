@@ -317,3 +317,15 @@ def test_record_writes_answer_searches_and_sources(cli: Any, tmp_path: Any) -> N
 def test_no_record_file_without_flag(cli: Any, tmp_path: Any) -> None:
     cli(["--brief", "Acme"])
     assert list(tmp_path.iterdir()) == []
+
+
+def test_brief_prompt_requires_citing_every_source_a_statement_uses() -> None:
+    """Regression: Databricks eval found facts merged from several results but one citation."""
+    prompt = starter_agent.brief_prompt(date(2026, 11, 13))
+    assert (
+        "combines facts from several search results, cite every one of them" in prompt
+    )
+    assert "Cite a source only for facts its text states" in prompt
+    assert (
+        "If sources disagree on a figure, give each value with its own source" in prompt
+    )
