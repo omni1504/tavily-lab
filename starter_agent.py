@@ -63,6 +63,9 @@ Answer the user's question directly and include source URLs when available.
 BRIEF_USER_MESSAGE = "Account: {account}"
 BRIEF_NEWS_WINDOW_DAYS = 90
 BRIEF_MAX_SEARCHES = 10
+# Non-streaming Converse calls (generate_brief / MCP) send nothing until the whole brief is
+# written, which can take longer than botocore's default 60 s read timeout.
+BEDROCK_TIMEOUT_S = 300
 # Balanced "(...)" groups are part of the URL (e.g. Wikipedia's Amazon_(company)); the ")" that
 # closes a Markdown link is not.
 URL_PATTERN = re.compile(r"https?://(?:[^\s()<>\[\]\"']|\([^\s()<>\"']*\))+")
@@ -124,6 +127,7 @@ llm = ChatBedrockConverse(
     model_id="us.anthropic.claude-sonnet-4-6",
     region_name="us-west-2",
     max_tokens=64000,
+    timeout=BEDROCK_TIMEOUT_S,
     credentials_profile_name="amirasf+genai",
     additional_model_request_fields={
         "thinking": {"type": "adaptive"},

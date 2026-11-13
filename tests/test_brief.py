@@ -424,3 +424,10 @@ def test_generate_brief_requires_tavily_key(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="TAVILY_API_KEY"):
         starter_agent.generate_brief("Acme")
+
+
+def test_bedrock_client_outlasts_non_streaming_brief() -> None:
+    """generate_brief uses non-streaming Converse; botocore's 60 s default cut it off (#17)."""
+    client_config = starter_agent.llm.client.meta.config
+    assert client_config.read_timeout == starter_agent.BEDROCK_TIMEOUT_S
+    assert starter_agent.BEDROCK_TIMEOUT_S > 60
