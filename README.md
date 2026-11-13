@@ -77,12 +77,10 @@ The JSON form is for Claude Desktop and Quick Desktop. Use absolute paths, becau
 ## Roadmap
 
 - **Evals in LangSmith** (#8): linked traces for eval runs, scores posted as trace feedback, then a golden-set dataset with experiments.
-- **Eval quality:**
+- **Eval coverage:**
   - compare search strategies on the golden set (#5);
-  - investigate `partial` claims and the J1 bar (#11);
-  - flag misattributed citations (#10);
+  - add a misattributed-citation check (#10);
   - try a dedicated judge model (#9).
-- **Brief quality:** news relevance, covering subject checks, event dates and primary sources (#4).
 - **Configuration:** Bedrock profile, region and judge model from `.env` (#1).
 
 ## Checks
