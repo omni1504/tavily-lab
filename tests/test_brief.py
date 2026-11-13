@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 from langchain.agents.middleware import ToolCallLimitMiddleware
-from langchain_core.messages import AIMessageChunk, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from typer.testing import CliRunner
 
 import starter_agent
@@ -246,3 +246,74 @@ def test_stream_ignores_empty_middleware_updates(cli: Any) -> None:
     _kwargs, _agent, output = cli(["--brief", "Snowflake"], events)
     assert "Agent run failed" not in output
     assert "Sources (from Tavily tool output)" in output
+
+
+def test_record_writes_answer_searches_and_sources(cli: Any, tmp_path: Any) -> None:
+    payload = tavily_payload("https://a.com/1")
+    payload["results"][0].update(
+        content="A text", published_date="2026-11-01", score=0.9
+    )
+    events: list[tuple[str, Any]] = [
+        (
+            "updates",
+            {
+                "model": {
+                    "messages": [
+                        AIMessage(
+                            content="",
+                            tool_calls=[
+                                {
+                                    "id": "c1",
+                                    "name": "tavily_search",
+                                    "args": {"query": "q"},
+                                }
+                            ],
+                        )
+                    ]
+                }
+            },
+        ),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        ToolMessage(
+                            content=json.dumps(payload),
+                            tool_call_id="c1",
+                            name="tavily_search",
+                        )
+                    ]
+                }
+            },
+        ),
+        ("messages", (AIMessageChunk(content="- Fact [A](https://a.com/1)\n"), {})),
+    ]
+    path = tmp_path / "out" / "acme.json"
+    cli(["--brief", "--record", str(path), "Acme"], events)
+
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert record["input"] == "Acme"
+    assert record["brief"] is True
+    assert record["answer"] == "- Fact [A](https://a.com/1)\n"
+    assert record["searches"] == [
+        {
+            "args": {"query": "q"},
+            "results": [
+                {
+                    "url": "https://a.com/1",
+                    "title": "T 1",
+                    "content": "A text",
+                    "published_date": "2026-11-01",
+                    "score": 0.9,
+                }
+            ],
+        }
+    ]
+    assert record["sources"] == {"https://a.com/1": "T 1"}
+    assert record["duration_s"] >= 0
+
+
+def test_no_record_file_without_flag(cli: Any, tmp_path: Any) -> None:
+    cli(["--brief", "Acme"])
+    assert list(tmp_path.iterdir()) == []

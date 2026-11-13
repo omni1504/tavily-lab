@@ -32,7 +32,9 @@ import json
 import logging
 import os
 import re
+import time
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Annotated, Any
 
 import typer
@@ -139,17 +141,28 @@ def brief_prompt(today: date) -> str:
     )
 
 
-def collect_sources(content: Any, sources: dict[str, str]) -> None:
-    """Record every URL Tavily actually returned; citations are verified against these."""
+def search_results(content: Any) -> list[dict[str, Any]]:
+    """Tavily results from a tool message; empty for non-search content such as the limit message."""
     try:
         payload = json.loads(content) if isinstance(content, str) else content
     except json.JSONDecodeError:
-        return  # e.g. the tool-call-limit message: not a search result, nothing to record
+        return []
     if not isinstance(payload, dict):
-        return
-    for result in payload.get("results", []):
-        if isinstance(result, dict) and result.get("url"):
+        return []
+    return [r for r in payload.get("results", []) if isinstance(r, dict)]
+
+
+def collect_sources(content: Any, sources: dict[str, str]) -> None:
+    """Record every URL Tavily actually returned; citations are verified against these."""
+    for result in search_results(content):
+        if result.get("url"):
             sources.setdefault(result["url"], result.get("title") or "Untitled")
+
+
+def write_record(path: Path, record: dict[str, Any]) -> None:
+    """Persist a run for offline evaluation, so scoring never needs to re-run the agent."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def normalize_url(url: str) -> str:
@@ -276,6 +289,12 @@ def main(
             help="LangSmith tracing (needs LANGSMITH_API_KEY).",
         ),
     ] = True,
+    record: Annotated[
+        Path | None,
+        typer.Option(
+            "--record", help="Write the answer, searches and sources to this JSON file."
+        ),
+    ] = None,
 ) -> None:
     """Ask a question and stream a small LangChain agent that searches with Tavily."""
 
@@ -335,6 +354,8 @@ def main(
     last_event_was_text = False
     sources: dict[str, str] = {}
     answer_parts: list[str] = []
+    searches: dict[str, dict[str, Any]] = {}
+    started = time.monotonic()
 
     try:
         stream = agent.stream(
@@ -398,6 +419,10 @@ def main(
                     for message in node_update.get("messages", []):
                         if getattr(message, "type", None) == "ai":
                             for tool_call in getattr(message, "tool_calls", []) or []:
+                                searches.setdefault(
+                                    str(tool_call.get("id")),
+                                    {"args": tool_call.get("args", {}), "results": []},
+                                )
                                 key = str(
                                     tool_call.get("id")
                                     or tool_call.get("name")
@@ -415,7 +440,12 @@ def main(
                                 console.print()
                                 last_event_was_text = False
                             print_tool_result(message)
-                            collect_sources(getattr(message, "content", ""), sources)
+                            content = getattr(message, "content", "")
+                            collect_sources(content, sources)
+                            searches.setdefault(
+                                str(getattr(message, "tool_call_id", "")),
+                                {"args": {}, "results": []},
+                            )["results"] = search_results(content)
 
         if last_event_was_text:
             console.print()
@@ -427,6 +457,20 @@ def main(
                 markup=False,
                 highlight=False,
                 soft_wrap=True,  # keep long URLs on one line so they stay copyable
+            )
+
+        if record:
+            write_record(
+                record,
+                {
+                    "input": question_text,
+                    "brief": brief,
+                    "date": date.today().isoformat(),
+                    "answer": "".join(answer_parts),
+                    "searches": list(searches.values()),
+                    "sources": sources,
+                    "duration_s": round(time.monotonic() - started, 1),
+                },
             )
 
     except KeyboardInterrupt:
