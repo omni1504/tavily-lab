@@ -203,3 +203,18 @@ def test_score_deterministic_returns_all_checks() -> None:
         "section_rates",
         "cost",
     }
+
+
+def test_nested_sub_bullets_fold_into_parent_claim() -> None:
+    answer = (
+        "## Overview\n"
+        "- **Products:** platform encompassing:\n"
+        "  - **A** – first\n"
+        "  - **B** – second [Src](https://acme.com/p)\n"
+        "- Next claim (No citation)\n"
+    )
+    claims = scoring.extract_claims(answer)
+    assert len(claims) == 2
+    assert claims[0].text.endswith("[Src](https://acme.com/p)")
+    assert claims[0].urls == ("https://acme.com/p",)
+    assert scoring.check_citation_coverage(claims)["pass"] is True

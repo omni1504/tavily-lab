@@ -15,7 +15,9 @@ from scoring import SECTIONS, Claim, Company, extract_claims
 import starter_agent
 from starter_agent import normalize_url
 
-SOURCE_CHAR_LIMIT = 2000
+# Tavily snippets are ~2.4k chars at most; the cap only guards against unusual payloads, so the
+# judge sees the same text the agent saw when writing the brief.
+SOURCE_CHAR_LIMIT = 6000
 JUDGE_MAX_TOKENS = 8192
 SUBJECT_SECTIONS = ("Overview", "Recent news")
 
@@ -33,6 +35,8 @@ For every claim, return:
   publication date instead of a different event date stated in the text; "wrong" if it matches
   neither; "not_stated" if the text gives no event date. Use "not_applicable" for other sections.
 - rationale: one short sentence.
+For Main personas table rows, judge support only for the person's name and title; the
+Relevance column is the writer's own analysis and must not lower the support label.
 Return exactly one judgment per claim id.
 """
 
@@ -87,12 +91,22 @@ def build_judge_llm() -> ChatBedrockConverse:
 
 
 def source_index(record: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Tavily results keyed by normalized URL, as returned during the run."""
+    """Tavily results keyed by normalized URL, as returned during the run.
+
+    Tavily returns query-specific snippets, so one URL can come back from several searches
+    with different text; all snippets are merged so the judge sees everything the agent saw.
+    """
     index: dict[str, dict[str, Any]] = {}
     for search in record.get("searches", []):
         for result in search.get("results", []):
-            if result.get("url"):
-                index.setdefault(normalize_url(result["url"]), result)
+            if not result.get("url"):
+                continue
+            key = normalize_url(result["url"])
+            content = str(result.get("content") or "")
+            if key not in index:
+                index[key] = dict(result, content=content)
+            elif content and content not in index[key]["content"]:
+                index[key]["content"] += f"\n[...]\n{content}"
     return index
 
 

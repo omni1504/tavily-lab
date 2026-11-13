@@ -93,7 +93,11 @@ def split_sections(answer: str) -> dict[str, list[str]]:
 
 
 def _claim_lines(lines: list[str]) -> list[str]:
-    """Bullets and table body rows; table header rows sit directly above the separator."""
+    """Bullets and table body rows; table header rows sit directly above the separator.
+
+    Indented sub-bullets belong to their parent bullet (the citation often sits on the last
+    sub-bullet), so they are folded into it as one claim.
+    """
     claims: list[str] = []
     previous_was_table_row = False
     for raw in lines:
@@ -104,7 +108,10 @@ def _claim_lines(lines: list[str]) -> list[str]:
             previous_was_table_row = False
             continue
         is_table_row = line.startswith("|")
-        if is_table_row or line.startswith(("- ", "* ")):
+        is_bullet = line.startswith(("- ", "* "))
+        if is_bullet and raw[:1].isspace() and claims and not previous_was_table_row:
+            claims[-1] = f"{claims[-1]} {line}"
+        elif is_table_row or is_bullet:
             claims.append(line)
         previous_was_table_row = is_table_row
     return claims

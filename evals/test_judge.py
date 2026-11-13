@@ -32,7 +32,7 @@ RECORD: dict[str, Any] = {
                 {
                     "url": "https://acme.com/about/",
                     "title": "About Acme",
-                    "content": "Acme makes widgets. " * 200,
+                    "content": "Acme makes widgets. " * 400,
                     "published_date": None,
                 },
                 {
@@ -111,7 +111,7 @@ def test_format_claims_includes_source_text_capped_and_dates() -> None:
     assert "## Claim 0 (section: Overview)" in text
     assert "Published: unknown" in text
     assert "Published: 2026-11-02" in text
-    assert text.count("Acme makes widgets.") < 200  # content truncated
+    assert text.count("Acme makes widgets.") < 400  # content truncated
     assert "never-returned" not in text.split("## Claim 1")[1]
 
 
@@ -167,3 +167,33 @@ def test_claims_the_judge_skips_are_marked_not_judged() -> None:
 def test_quality_scores_are_bounded(score: int) -> None:
     with pytest.raises(ValueError):
         Score(score=score, rationale="x")
+
+
+def test_judge_prompt_scopes_persona_support_and_sees_full_snippets() -> None:
+    assert "only for the person's name and title" in judge.JUDGE_SYSTEM_PROMPT
+    assert judge.SOURCE_CHAR_LIMIT >= 2400  # Tavily snippets are up to ~2.4k chars
+
+
+def test_source_index_merges_snippets_of_the_same_url_across_searches() -> None:
+    """Regression: only the first snippet was kept, so the judge missed the text the agent used."""
+    record = {
+        "searches": [
+            {
+                "results": [
+                    {"url": "https://p.com/x", "title": "P", "content": "Contact info"}
+                ]
+            },
+            {
+                "results": [
+                    {"url": "https://p.com/x/", "title": "P", "content": "Acquired Y"}
+                ]
+            },
+            {
+                "results": [
+                    {"url": "https://p.com/x", "title": "P", "content": "Contact info"}
+                ]
+            },
+        ]
+    }
+    merged = judge.source_index(record)["https://p.com/x"]["content"]
+    assert merged == "Contact info\n[...]\nAcquired Y"
