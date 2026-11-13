@@ -68,7 +68,8 @@ Today is {today}.
 Research process. Use Tavily search for every section except Suggested talking points:
 1. In your first step, run these four Tavily searches together:
    - Overview: the account's business, industry, size, headquarters and key products.
-   - Recent news: topic="news", start_date="{since}".
+   - Recent news: topic="news", start_date="{since}". Query with the account's name plus its
+     stock ticker when it is publicly traded; omit the ticker otherwise.
    - Strategic priorities: strategy, initiatives, investments, earnings commentary.
    - Main personas: leadership team and technology/business decision-makers.
 2. If a section has fewer than 2 relevant results, run a refined Tavily search for that
@@ -88,7 +89,9 @@ From Tavily search: stated goals, initiatives and investments.
 
 ## Main personas
 From Tavily search: roles likely involved in a buying decision, business and technical.
-Name executives when public.
+Name executives when public. Use a Markdown table with columns
+Name | Title | Relevance | Source, where every row's Source is its own [title](URL) link
+or "(No citation)".
 
 ## Suggested talking points
 Derived from the sections above; no new search.
@@ -98,7 +101,8 @@ Business value, outcomes and timing hooks.
 Architecture, integration, security and technical-fit angles.
 
 Citation rules (mandatory):
-- Write every statement as a bullet that ends with its source as a Markdown link: [title](URL).
+- Write every statement as a bullet (or, in Main personas, a table row) that ends with its
+  source as a Markdown link: [title](URL).
 - Use only URLs returned by Tavily search. Never invent or guess URLs.
 - If a statement is not backed by a search result (for example a suggested talking point
   or your own inference), end it with "(No citation)".

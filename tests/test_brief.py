@@ -70,6 +70,24 @@ def test_brief_prompt_injects_dates_cap_sections_and_citation_rules() -> None:
     assert "(No citation)" in prompt
 
 
+def test_brief_prompt_requires_persona_sources_and_ticker_news_queries() -> None:
+    prompt = starter_agent.brief_prompt(date(2026, 11, 13))
+    assert "Name | Title | Relevance | Source" in prompt
+    assert "every row's Source is its own [title](URL) link" in prompt
+    assert "name plus its\n     stock ticker when it is publicly traded" in prompt
+    assert "omit the ticker otherwise" in prompt
+
+
+def test_brief_prompt_names_no_specific_company() -> None:
+    """Examples naming a real company would bias every brief toward it."""
+    assert "Snowflake" not in starter_agent.BRIEF_PROMPT
+
+
+def test_llm_output_budget_fits_a_full_brief() -> None:
+    """Regression: 4096 tokens (shared with adaptive thinking) truncated briefs."""
+    assert starter_agent.llm.max_tokens == 64000
+
+
 def test_brief_mode_uses_brief_prompt_account_message_and_search_cap(
     cli: Any,
 ) -> None:
