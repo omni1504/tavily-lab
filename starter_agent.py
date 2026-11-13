@@ -33,6 +33,7 @@ import logging
 import os
 import re
 import time
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated, Any
@@ -313,6 +314,61 @@ def build_agent(brief: bool) -> Any:
         system_prompt=brief_prompt(date.today()) if brief else SYSTEM_PROMPT,
         middleware=middleware,
     )
+
+
+@dataclass(frozen=True)
+class BriefResult:
+    answer: str
+    sources: dict[str, str]
+    searches: list[dict[str, Any]]
+
+    @property
+    def appendix(self) -> str:
+        return build_source_appendix(self.answer, self.sources)
+
+    def markdown(self, include_sources: bool = True) -> str:
+        if not include_sources:
+            return self.answer
+        return f"{self.answer}\n\n---\n\n{self.appendix}"
+
+
+def brief_result(messages: list[Any]) -> BriefResult:
+    """Sources and searches from a finished run; the answer is the last AI message's text."""
+    sources: dict[str, str] = {}
+    searches: dict[str, dict[str, Any]] = {}
+    answer = ""
+    for message in messages:
+        kind = getattr(message, "type", None)
+        if kind == "ai":
+            for call in getattr(message, "tool_calls", []) or []:
+                searches[str(call.get("id"))] = {
+                    "args": call.get("args", {}),
+                    "results": [],
+                }
+            answer = message_text(message) or answer
+        elif kind == "tool":
+            content = getattr(message, "content", "")
+            collect_sources(content, sources)
+            searches.setdefault(
+                str(getattr(message, "tool_call_id", "")), {"args": {}, "results": []}
+            )["results"] = search_results(content)
+    return BriefResult(answer, sources, list(searches.values()))
+
+
+def generate_brief(account: str, *, tracing: bool = True) -> BriefResult:
+    """Run --brief without printing anything (stdout belongs to callers such as MCP)."""
+    if not os.getenv("TAVILY_API_KEY"):
+        raise RuntimeError("TAVILY_API_KEY is not set (add it to .env)")
+    configure_tracing(tracing)
+    agent = build_agent(brief=True)
+    state = agent.invoke(
+        {
+            "messages": [
+                {"role": "user", "content": BRIEF_USER_MESSAGE.format(account=account)}
+            ]
+        }
+    )
+    return brief_result(state["messages"])
 
 
 @app.command()
