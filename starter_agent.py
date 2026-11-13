@@ -29,6 +29,7 @@ You are not required to follow the below sample code.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Annotated, Any
 
@@ -46,6 +47,7 @@ load_dotenv()
 
 app = typer.Typer(add_completion=False)
 console = Console()
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a concise research assistant.
 Use Tavily search when you need current or factual web information.
@@ -149,6 +151,25 @@ def main(
     question: Annotated[list[str], typer.Argument(help="Question")],
 ) -> None:
     """Ask a question and stream a small LangChain agent that searches with Tavily."""
+
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+
+    # LangChain traces automatically from LANGSMITH_* env vars; default tracing on when a key exists.
+    if os.getenv("LANGSMITH_API_KEY"):
+        os.environ.setdefault("LANGSMITH_TRACING", "true")
+    else:
+        os.environ["LANGSMITH_TRACING"] = "false"
+    if os.environ["LANGSMITH_TRACING"].lower() == "true":
+        logger.info(
+            "LangSmith tracing enabled (project: %s)",
+            os.getenv("LANGSMITH_PROJECT", "default"),
+        )
+    else:
+        logger.info(
+            "LangSmith tracing disabled (set LANGSMITH_API_KEY in .env to enable)"
+        )
 
     require_env(
         "TAVILY_API_KEY",
