@@ -74,6 +74,15 @@ claude mcp add tavily-brief -- uv run --script <repo>/mcp_server/server.py   # C
 
 The JSON form is for Claude Desktop and Quick Desktop. Use absolute paths, because desktop apps don't inherit your shell `PATH`.
 
+## Roadmap
+
+- **Evals in LangSmith** (#8): linked traces for eval runs, scores posted as trace feedback, then a golden-set dataset with experiments.
+- **Eval coverage:**
+  - compare search strategies on the golden set (#5);
+  - add a misattributed-citation check (#10);
+  - try a dedicated judge model (#9).
+- **Configuration:** Bedrock profile, region and judge model from `.env` (#1).
+
 ## Checks
 
 ```bash
