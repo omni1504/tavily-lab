@@ -108,7 +108,7 @@ Citation rules (mandatory):
 llm = ChatBedrockConverse(
     model_id="us.anthropic.claude-sonnet-4-6",
     region_name="us-west-2",
-    max_tokens=4096,
+    max_tokens=64000,
     credentials_profile_name="amirasf+genai",
     additional_model_request_fields={
         "thinking": {"type": "adaptive"},
