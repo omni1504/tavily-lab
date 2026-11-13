@@ -66,3 +66,6 @@ dmypy.json
 *.swp
 .DS_Store
 Thumbs.db
+
+# --- Eval outputs (local runs; may contain fetched page text) ---
+evals/results/
