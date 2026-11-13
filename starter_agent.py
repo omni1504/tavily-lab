@@ -147,6 +147,7 @@ def print_tool_result(message: Any) -> None:
 @app.command()
 def main(
     question: Annotated[list[str], typer.Argument(help="Question")],
+) -> None:
     """Ask a question and stream a small LangChain agent that searches with Tavily."""
 
     require_env(
