@@ -70,6 +70,8 @@ Research process. Use Tavily search for every section except Suggested talking p
    - Overview: the account's business, industry, size, headquarters and key products.
    - Recent news: topic="news", start_date="{since}". Query with the account's name plus its
      stock ticker when it is publicly traded; omit the ticker otherwise.
+   Keep every query to the account name and topic keywords. Never add time words such as
+   "latest" or "recent", or a year; start_date already sets the time window.
    - Strategic priorities: strategy, initiatives, investments, earnings commentary.
    - Main personas: leadership team and technology/business decision-makers.
 2. If a section has fewer than 2 relevant results, run a refined Tavily search for that

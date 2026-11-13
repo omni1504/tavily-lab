@@ -78,6 +78,13 @@ def test_brief_prompt_requires_persona_sources_and_ticker_news_queries() -> None
     assert "omit the ticker otherwise" in prompt
 
 
+def test_brief_prompt_forbids_time_words_in_queries() -> None:
+    """Regression: "latest ... 2026" matched an unrelated article's own subheadings."""
+    prompt = starter_agent.brief_prompt(date(2026, 11, 13))
+    assert 'Never add time words such as\n   "latest" or "recent", or a year' in prompt
+    assert "start_date already sets the time window" in prompt
+
+
 def test_brief_prompt_names_no_specific_company() -> None:
     """Examples naming a real company would bias every brief toward it."""
     assert "Snowflake" not in starter_agent.BRIEF_PROMPT
